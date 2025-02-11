@@ -5,6 +5,9 @@ This repository contains the source code for a paired LLM model that transfers k
 ## Repository Contents
 
 - **model.py**: Source code for the paired model, including the implementation of training and inference routines.
+- **model_checkpoint.pth**: Model weights checkpoint saved after training.
+- **compare-responses-from-models.md**: Contains answers to test questions for different models (necessary for my research)
+- **paper_llm_modules.pdf**: LLM Module Research Paper
 
 ## Pre-trained Weights
 
@@ -71,3 +74,18 @@ Additional Notes
 - Ensure you have sufficient computational resources for training the model.
 - For reproducibility, consider setting a fixed seed for random operations.
 - You can adjust model parameters and training settings directly in the model.py file.
+
+## Citation
+
+```
+@misc{Kolomeitsev2023LLMModules,
+      title = {LLM Modules: Knowledge Transfer from a Large to a Small Model using Enhanced Cross-Attention},
+      author = {Konstantin Kolomeitsev},
+      year = {2025}}
+}
+
+```
+
+## Contact
+
+If you have any questions, please raise an issue or contact with me [uol92kot@gmail.com](uol92kot@gmail.com).
