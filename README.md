@@ -5,7 +5,6 @@ This repository contains the source code for a paired LLM model that transfers k
 ## Repository Contents
 
 - **model.py**: Source code for the paired model, including the implementation of training and inference routines.
-- **model_checkpoint.pth**: Model weights checkpoint saved after training.
 - **compare-responses-from-models.md**: Contains answers to test questions for different models (necessary for my research)
 - **paper_llm_modules.pdf**: LLM Module Research Paper
 
