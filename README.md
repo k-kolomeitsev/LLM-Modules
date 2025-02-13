@@ -79,12 +79,15 @@ Additional Notes
 ## Citation
 
 ```
-@misc{Kolomeitsev2023LLMModules,
+@misc{Kolomeitsev2025LLMModules,
       title = {LLM Modules: Knowledge Transfer from a Large to a Small Model using Enhanced Cross-Attention},
       author = {Konstantin Kolomeitsev},
-      year = {2025}}
+      year = {2025},
+      eprint={2502.08213},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2502.08213}
 }
-
 ```
 
 ## Contact
