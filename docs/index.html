@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Teach a Model to Reason Without Overtraining It, for Less Than $10</title>
+  <meta name="description" content="A summary of research on transferring knowledge from a large model with frozen weights to a smaller model using an extended cross-attention mechanism (LLM modules).">
+  <meta name="keywords" content="LLM, machine learning, knowledge transfer, GPT Neo, Qwen2, DeepSeek, AI research, cross-attention">
+  <meta name="author" content="Your Name">
+  <link rel="canonical" href="https://yourusername.github.io/your-repo/">
+  <style>
+    /* Base styles for dark theme */
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 728px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1, h2, h3, h4 {
+      color: #ffffff;
+      margin-top: 1.5em;
+    }
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 2em;
+      margin-bottom: 0.5em;
+    }
+    h3 {
+      font-size: 1.75em;
+      margin-bottom: 0.5em;
+    }
+    p {
+      margin: 1em 0;
+      font-size: 1.1em;
+    }
+    ul, ol {
+      margin: 1em 0 1em 1.5em;
+    }
+    a {
+      color: #4e9af1;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    pre {
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      padding: 10px;
+      overflow-x: auto;
+      font-family: Consolas, monospace;
+      color: #e0e0e0;
+      margin: 1em 0;
+    }
+    code {
+      font-family: Consolas, monospace;
+    }
+    /* Responsive images (if any) */
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <article>
+      <header>
+        <h1>How to Teach a Model to Reason Without Overtraining It, for Less Than $10</h1>
+      </header>
+
+      <section id="introduction">
+        <h2>Introduction</h2>
+        <p>This article is a summary of my research on transferring knowledge from a large model with frozen weights to a smaller model, which we will train using an extended cross-attention mechanism—or, more simply, through LLM modules. The original research is available at <a href="https://huggingface.co/kkolomeitsev/llm-modules/blob/main/paper_llm_modules.pdf" target="_blank" rel="noopener">this link</a> (the paper on arXiv is currently under moderation). The repository with the code and weights is also available on Hugging Face: <a href="https://huggingface.co/kkolomeitsev/llm-modules" target="_blank" rel="noopener">llm-modules</a>.</p>
+        <p>The research arose from the need to utilize the knowledge of large pre-trained models within limited frameworks for a specific set of tasks, while having neither the budget nor the computational power for fine-tuning models—even moderately sized ones.</p>
+        <p>Additionally, a recently trending article on how to create a reasoning model via reinforcement learning (<a href="https://pretty-radio-b75.notion.site/DeepScaleR-Surpassing-O1-Preview-with-a-1-5B-Model-by-Scaling-RL-19681902c1468005bed8ca303013a4e2" target="_blank" rel="noopener">DeepScaleR article</a>) sparked the idea: why not take the Qwen2 1.5B model (a non-reasoning model) and try to teach it to reason at least at the level of the DeepSeek R1 Distill Qwen 1.5B model (a reasoning model obtained through distillation)?</p>
+        <p>To dive deeper, let’s begin with the standard architecture of large language models, which is practically the same across the board (if we disregard various optimizations). They consist of:</p>
+        <ul>
+          <li>A tokenizer</li>
+          <li>An embedding layer</li>
+          <li>The “body” of the transformer</li>
+          <li>An LM head – the final layer before converting embeddings back into words</li>
+        </ul>
+        <p><strong>The idea was as follows:</strong></p>
+        <p>We take a large model, freeze its weights, remove its LM head, and replace it with an enhanced cross-attention layer that will transfer “knowledge” to our small model. Then we take a small model—in our case, GPT Neo 125M—remove its embedding layer, and attach our cross-attention layer from the large model. And to avoid issues with incompatible tokenizers, we replace the native LM head of the small model with a custom one that can work with the same tokenizer as the large model.</p>
+        <p>Then we launch the training. In my case, I used the <em>bespokelabs/Bespoke-Stratos-17k</em> dataset, which contains chains of reasoning that I want to teach my model.</p>
+        <p>Ideally, I aimed to create a combination of two models in which the large model acts as the “source of knowledge” and the small model functions as the “reasoner.”</p>
+        <p>An additional benefit is that such a combination can process the same amount of context as the large model (in my case, 125k tokens), whereas the small model can handle only a 2048-token context window.</p>
+      </section>
+
+      <section id="process">
+        <h2>Process</h2>
+        <p>A challenge during training was that, although the large model can handle a large context, processing it entirely on a low-end machine is not feasible. Therefore, I resorted to a trick: when forming the dataset, I added a filter to ensure the total length (query + answer) did not exceed 4096 tokens.</p>
+        <p>Training was conducted on a single machine with 4 vCPUs, 32 GB of memory, and 1 x NVIDIA L4 GPU, which I rented from Google Cloud.</p>
+        <p>The software stack used for the research was also quite simple—Python 3.11, PyTorch, Transformers, Datasets, and tqdm for the progress bar. All the source code, which consists of a single .py file, is available on Hugging Face, so I won’t delve into the programming details.</p>
+        <p>Training was carried out over 15 epochs, with the dataset being shuffled each time if the validation loss dropped below 1.8. In the first epoch, the training loss decreased from 13.8 to 2.3; in subsequent epochs, the training loss decreased by roughly 0.05 to 0.2 per epoch. The validation loss also steadily decreased, which indicated that overfitting was not occurring, even with the small dataset.</p>
+        <p>In total, training took about 5 hours, and the final validation loss was approximately 1.1.</p>
+        <p>I spent less than $10 on renting the instance during training.</p>
+        <p>After training, it was time for tests designed to confirm or refute whether knowledge was indeed being transferred from the large model to the small one. To do this, I needed to further train the small model separately to ensure it wasn’t merely generating answers on its own. Thus, I trained GPT Neo 125M in two instances—one with pre-trained weights and one from scratch.</p>
+        <p>Since the dataset mainly consists of mathematical problems, I decided to test the models on simple questions and observe how they reason (or fail to reason) and how these chains of thought influence the subsequent answers.</p>
+      </section>
+
+      <section id="results">
+        <h2>Results</h2>
+        <h3>Disclaimer:</h3>
+        <p>I must note that I had no illusions of obtaining a fully reasoning model that absorbed all the knowledge and could match the original large model. Remember, the goal was specific—to teach the model certain skills without spending enormous sums of money or computational power. This scenario is akin to having a large “database” filled with numerous “tables” of data (the large model), and through training, we only provide schemas for select “tables” and teach the model to work with them. I consider this limitation in knowledge a plus since, in real-world business applications, a model does not need to know history or outdated recipes—it only needs to solve the given tasks, and for AGI, one can turn to OpenAI.</p>
+        <p><strong>Additionally:</strong> During training and in queries to the models, I incorporated a system prompt intended to enforce certain rules on the model:</p>
+        <pre><code>System:
+**Your role as an assistant involves thoroughly exploring questions through a systematic long thinking process before providing the final precise and accurate solutions. This requires engaging in a comprehensive cycle of analysis, summarizing, exploration, reassessment, reflection, backtracing, and iteration to develop a well-considered thinking process. Please structure your response into two main sections: Thought and Solution. In the Thought section, detail your reasoning process using the specified format: &lt;|begin_of_thought|&gt; {thought with steps separated with '\n\n'} &lt;|end_of_thought|&gt; Each step should include detailed considerations such as analyzing questions, summarizing relevant findings, brainstorming new ideas, verifying the accuracy of the current steps, refining any errors, and revisiting previous steps. In the Solution section, based on various attempts, explorations, and reflections from the Thought section, systematically present the final solution that you deem correct. The solution should remain logical, accurate, and concise, detailing the necessary steps to reach the conclusion, formatted as follows: &lt;|begin_of_solution|&gt; {final formatted, precise, and clear solution} &lt;|end_of_solution|&gt; Now, try to solve the following question through the above guidelines:**
+</code></pre>
+        <p>Now, let’s move on to the specific responses obtained from different models (you can find the complete responses in the same repository on Hugging Face: <a href="https://huggingface.co/kkolomeitsev/llm-modules/blob/main/compare-responses-from-models.md" target="_blank" rel="noopener">compare-responses-from-models.md</a>):</p>
+        
+        <h3>DeepSeek R1 671B</h3>
+        <pre><code>User:
+sum of 5 and 5
+
+Assistant:
+&lt;|begin_of_thought|&gt;
+Okay, so I need to find the sum of 5 and 5. Let me think about how to approach this. Sum means adding two numbers together, right? So when they say "sum of 5 and 5," that should just be 5 plus 5. But let me make sure I'm not overcomplicating it.
+[ rich chain of reasoning ]
+&lt;|end_of_thought|&gt;
+&lt;|begin_of_solution|&gt;
+The sum of 5 and 5 is calculated by adding the two numbers together:
+5+5=10
+**Answer:** 10
+&lt;|end_of_solution|&gt;
+</code></pre>
+        
+        <h3>DeepSeek-R1-Distill-Qwen-1.5B-GGUF 32FP</h3>
+        <pre><code>[ system prompt ]
+User:
+sum of 5 and 5
+
+Assistant:
+&lt;|begin_of_thought|&gt;
+Okay, so I need to figure out the sum of 5 and 5. Hmm, let's see. Sum usually means adding two numbers together, right? So if I have 5 apples and someone gives me another 5 apples, how many apples do I have in total?
+[ rich chain of reasoning ]
+&lt;|end_of_thought|&gt;
+&lt;|begin_of_solution|&gt;
+**Thought:**
+To find the sum of 5 and 5, we can approach it in multiple ways:
+1. **Counting Objects:** If you have five items and add another five, counting them gives a total of ten.
+2. **Number Line Addition:** Starting at 5 and moving 5 units to the right on a number line lands you at 10.
+3. **Modular Arithmetic (if applicable):** The sum is straightforward unless specified otherwise.
+4. **Real-life Applications:** In contexts like money or time, adding 5 and 5 results in $10.
+**Solution:**
+After considering various methods, we can conclude that the sum of 5 and 5 is:
+5+5=10
+&lt;|end_of_solution|&gt;
+</code></pre>
+        
+        <h3>Qwen2-1.5B-Instruct-GGUF FP16</h3>
+        <pre><code>[ system prompt ]
+User:
+sum of 5 and 5
+
+Assistant:
+Thought: Firstly, we need to determine what operation we're asked to perform. In this case, it's addition.
+Next, we must consider the numbers involved - 5 + 5.
+Solution: To find the sum of these two numbers:
+1. Add 5 and 5 together: 5+5=10.
+Therefore, the sum of 5 and 5 is 10.
+Thought: After performing the addition, we have reached our final answer correctly. No further steps are necessary.
+Solution: The sum of 5 and 5 is 10.
+</code></pre>
+        
+        <h3>GPT-Neo-125M</h3>
+        <pre><code>[ system prompt ]
+User:
+sum of 5 and 5
+
+Assistant:
+  =**A**
+The answer you specified after thoughtfully defining the question/solution/problems could be achieved by putting together your answers.
+The answers should be carefully organized into a brief summary, followed by a summary of the discussion. If you have any questions, you may provide the answer immediately. See the Discussion section for an informal discussion of the specific answers.
+[ nonsensical block of text ]
+</code></pre>
+        
+        <h3>GPT-Neo-125M-fine-tuned</h3>
+        <pre><code>[ system prompt ]
+User:
+sum of 5 and 5
+
+Assistant:
+
+"How can the use of photochemistry for the treatment of cancer cells be optimized to effectively treat such cells?"
+
+Assistant:
+&lt;|begin_of_thought|&gt;
+Okay, so I have this question about photochemistry for cancer treatment. It asks how the use of photochemistry helps to effectively treat cancer cells with specific photoplastines and what that means for having a reaction in mind. Let me think about it step by step.
+[ nonsensical block of text ]
+</code></pre>
+        
+        <h3>GPT-Neo-125M-clean (trained from scratch on the dataset)</h3>
+        <pre><code>[ system prompt ]
+User:
+sum of 5 and 5
+
+Assistant:
+Okay, so I need to solve the question about how that the result in bioremediation of a day at those strong field of all under two different types of the way to understand what that during a one amount of a efficiency of the entire s, and constant gamma, and two T has to create them in binding equation of these two equal to form. It's also look at-5-4.
+First, I remember that the left and another, right? The fifth is the same relationship. The common ratio of the reaction with two lines from the question is the constant.
+[ nonsensical block of text ]
+</code></pre>
+        
+        <h3>CombinedModel (my paired model combining non-reasoning Qwen2-1.5B and GPT Neo 125M)</h3>
+        <h4>Query 1</h4>
+        <pre><code>[ system prompt ]
+User:
+sum of 5 and 5
+
+Assistant:
+&lt;|begin_of_thought|&gt;
+Okay, let's see. I need to compute the sum of 5 and 5. Hmm, first, I remember that 5 plus 5 is 10. That seems right. Let me verify that step by step to make sure I'm not missing anything.
+Alright, 5 plus 5. First, I remember that 5 times 1 is 5, so 5 + 5 is 10. Yeah, that seems right. Both methods give the same result.
+First, I have to make sure I didn't skip any steps or make a mistake in the approach.
+The key here is that for any two numbers, the sum is the same for you and if I do the the same the same. So maybe I missed something. Alternatively, maybe I could think about the negative sign. Let me think step by step.
+First, the two numbers are 5 and 5. So, 5 + 5. Hmm, "5 + 5" plus the negative sign. Alternatively, maybe I should write down the formula for the arithmetic starting with the first number.
+Let me think step by step.
+For the sum of two numbers, the formula is:
+x + y
+So, 5 + 5.
+Let me check if I did it right. Let's confirm with another method.
+For the sum of two numbers, the formula is:
+x + y
+So, 5 + 5.
+Alright, that's correct.
+Another way to think about it: if the first number is 5 and the second is 5. Then, the sum is 5 + 5 = 10.
+So, the sum of 5 and 5 is indeed 10. I think that's solid. I don't see any mistakes here. I don't see any errors in the reasoning. The key was that for any two numbers, the sum is the same. If I compute it step by step, I check with another method, and see if I did it right, I don't see any errors.
+Let me double-check with another method to make sure I didn't skip any steps.
+For example, if I think of the variables in the sum, x + y. The first number is 5, and the second is 5. So, y is 5. Then, substituting the two numbers:
+x + 5. Which is exactly 10.
+Similarly, I can think of the general formula x + y. The first number is 5, and the second is 5. So, y is 5. So, 5 + 5 = 10.
+Alternatively, if I consider that x and y are numbers. Since they are numbers, they are integer, so perhaps I can use integer possible values. But x + y, which is the sum, must be an integer. So, no, in the standard the first number is 5, and the second is 5. So, 5 + 5 = 10.
+Alternatively, if I consider that x and y are two elements in a list. But since both x and y are positive, the sum is always positive. So, 5 + 5 is positive.
+Alternatively, if I think of the values of x and y. But since x and y are positive, the sum is positive. So, yes, 5 + 5 equals 10.
+Another way: 5 + 5 equals 10. Using the formula: x + y, which is 5 + 5. Yep, that's correct.
+&lt;|end_of_thought|&gt;
+&lt;|begin_of_solution|&gt;
+To determine the sum of 5 and 5. I need to calculate the sum of two positive integers. The sum is calculated by adding the two numbers together.
+Let's calculate the sum step by step:
+1. **From the problem statement:**
+   - The sum of 5 and 5.
+2. **Calculate the sum**:
+   - Add the two numbers together:
+   - \(5 + 5 = 10\).
+Thus, the sum of 5 and 5 is \(\boxed{10}\).
+&lt;|end_of_solution|&gt;
+</code></pre>
+        
+        <h4>Query 2</h4>
+        <pre><code>[ system prompt ]
+User:
+find the remainder by dividing 7 by 4
+
+Assistant:
+&lt;|begin_of_thought|&gt;
+Okay, so I need to find the remainder when 7 is divided by 4. Hmm, let's break this down step by step.
+First, I remember that when you divide a number by another number, the remainder is the remaining number in the division. So, if I divide 7 by 4, the remainder would be the remaining number after the division.
+Let me see. 7 divided by 4. Hmm, 7 divided by 4 is 1 with a remainder of 3.
+Wait a second, let me make sure. 7 divided by 4 is 1 with a remainder of 3. That's correct.
+Is there another way to verify this? Maybe by dividing 7 by some numbers. Alternatively, maybe dividing 4 by 7 and then 7 by 4. Let's do that to verify.
+Dividing 4 by 7. 4 divided by 7 is 0 with a remainder of 4. Then adding that with the remainder from the division before.
+Adding 0 and 3. So, the remainder when 7 is divided by 4 is 3.
+Wait a second, does that mean 13 divided by 4: 3 with a remainder of 1? Wait, that can't be right. Let me check again.
+Original remainder: 3. Subtract 3 from 7: 7 -3 is 4, divided by 4 gives 1. So, 7 divided by 4 is 1 with remainder 3. That seems right.
+Alternatively, can this formula be used?
+For x divided by y: the remainder is equal to x - y * (d: 1). So, 7 -4*1 is 3, which matches the previous result.
+Alternatively, maybe we can express this in terms of congruence. Let a = x, b = y. Then, a + b �� 1 mod |y|, which is x + a �� a + b �� 1 �� 3 mod 4. Since 3 �� 3 mod 4, that's consistent.
+So, regardless of the method, I do think it's correct. The remainder is 3 when 7 is divided by 4.
+&lt;|end_of_thought|&gt;
+&lt;|begin_of_solution|&gt;
+The remainder when 7 is divided by 4 is 3.
+The formula that is used for it is: (a - b * d) = -n, where a is the number divide, b is the divisor, d is the number the remainder is, and n is the remainder.
+First, a - b * d = 7 - 4*3 = 7 -12 = -5, but since the remainder has to be positive, it's 3.
+For example, if we take n=1: (7 - 4*1) = 7 -4 =3, which is the same as before.
+Another example: if we take n=3: (7 -4*3) =7 -12 = -5. Since the remainder can't be negative, that's not correct.
+So, if we take n=1: 7 -4*1 =7 -4=3, which matches the previous result.
+Another method: using congruence. Let a = x, b = y. Then, a + b �� 1 mod |y|, which is x + a �� a + b ��1 ��3 mod4. Since 3≡3 mod4, that's definitely correct.
+Another way: the formula is a + b ��1 mod |y|, where a is the number not divisible by y, b is the number divisible by y, and n=1 is the remainder. Since 7 divided by 4, n=3.
+So, I think that's correct.
+&lt;|end_of_solution|&gt;
+</code></pre>
+      </section>
+
+      <section id="conclusion">
+        <h2>Conclusion</h2>
+        <p>In conclusion, I believe that the experiment was successful: the small model was able to absorb knowledge from the large model and even produce coherent chains of reasoning similar to those of the DeepSeek R1 model.</p>
+        <p>Among the advantages of this architecture, I can highlight the following points:</p>
+        <ol>
+          <li>Low training costs in terms of both computational resources and money.</li>
+          <li>The ability to work with a larger context than the small model can handle on its own.</li>
+          <li>High training speed.</li>
+          <li>Even a limited dataset yields acceptable results.</li>
+          <li>Unlimited possibilities for combining different models.</li>
+        </ol>
+        <p><strong>Further Development</strong></p>
+        <p>I believe that an architecture combining a "source of knowledge" with a "reasoner" will allow for more targeted training of models and the teaching of specific skills—since the "reasoner" could be replaced by a "poet," "programmer," "scientist," or something else. In fact, people generally have a similar base of knowledge, and it is the skills/experience acquired over a lifetime that make the difference. We can take this smart background and train it in specialized skills to create a sort of "expert." Perhaps this approach will even allow the intelligence of models to increase exponentially, depending on the number of parameters, rather than linearly as is currently the case.</p>
+        <p>Furthermore, the possibility of transferring knowledge at the logits level suggests that one could combine not only LLMs but also, for example, CNNs with LLMs for "understanding" images and developing multimodal models.</p>
+        <h2>That's all—thank you for your attention.</h2>
+      </section>
+    </article>
+  </div>
+</body>
+</html>
