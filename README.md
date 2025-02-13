@@ -2,6 +2,8 @@
 
 This repository contains the source code for a paired LLM model that transfers knowledge from a large pre-trained model (Qwen2-1.5B) to a smaller model (GPT-Neo-125M) using an Enhanced Cross-Attention mechanism.
 
+**Link to article (GitHub Pages)**: [How to teach a model to reason without retraining it for less than $10](https://k-kolomeitsev.github.io/LLM-Modules/)
+
 ## Repository Contents
 
 - **model.py**: Source code for the paired model, including the implementation of training and inference routines.
